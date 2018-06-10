@@ -197,31 +197,29 @@ function textToHtml($text)
  */
 function formatAttribute(&$data, $rule)
 {
-    if ($data && $rule) {
-        $arr = [
-            'string' => 'strval',
-            'int' => 'intval',
-            'date' => function ($param) {
-                return date('Y-m-d', $param);
-            },
-            'datetime' => function ($param) {
-                return date('Y-m-d H:i', $param);
-            },
-            'float' => 'floatval',
-            'callable' => 'call_user_func_array'
-        ];
-        foreach ($data as $k => &$v) {
-            foreach ($rule as $vv) {
-                if (in_array($k, $vv[1], true) && isset($arr[$vv[0]])) {
-                    if ($vv[0] != 'callable') {
-                        $v = call_user_func_array($arr[$vv[0]], [$v]);
-                    }
+    $arr = [
+        'string' => 'strval',
+        'int' => 'intval',
+        'date' => function ($param) {
+            return date('Y-m-d', $param);
+        },
+        'datetime' => function ($param) {
+            return date('Y-m-d H:i', $param);
+        },
+        'float' => 'floatval',
+        'callable' => 'call_user_func_array'
+    ];
+    foreach ($data as $k => &$v) {
+        foreach ($rule as $vv) {
+            if (in_array($k, $vv[1], true) && isset($arr[$vv[0]])) {
+                if ($vv[0] != 'callable') {
+                    $v = call_user_func_array($arr[$vv[0]], [$v]);
+                }
 
-                } elseif (in_array($k, array_keys($vv[1]), true)) {
-                    foreach ($vv[1] as $key => $call) {
-                        if ($key == $k && is_callable($call)) {
-                            $v = call_user_func_array($call, (array)$v);
-                        }
+            } elseif (in_array($k, array_keys($vv[1]), true)) {
+                foreach ($vv[1] as $key => $call) {
+                    if ($key == $k && is_callable($call)) {
+                        $v = call_user_func_array($call, (array)$v);
                     }
                 }
             }
