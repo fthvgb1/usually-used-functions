@@ -7,10 +7,25 @@
  */
 
 /**
+ * 是否是时间戳
+ * @param $timestamp
+ * @return bool
+ */
+function is_timestamp($timestamp)
+{
+    if (strtotime(date('m-d-Y H:i:s', $timestamp)) === $timestamp) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+
+/**
  * 获取给定时间段内的日期
- * @param $start int 开始时间戳
- * @param $end int 结束时间戳
- * @param $interval int 间隔
+ * @param $start int|string 开始时间
+ * @param $end int|string 结束时间
+ * @param $interval int 间隔,天
  * @param bool $obj 是否要原始datePeriod对象
  * @param string $format 日期格式化
  * @return array|DatePeriod
@@ -18,8 +33,9 @@
  */
 function periodDate($start, $end, $interval = 1, $obj = false, $format = 'Y-m-d')
 {
-    $start = date_create(date('Ymd', $start));
-    $end = date_create(date('ymd', $end));
+
+    $start = is_timestamp($start) ? date_create(date('Ymd', $start)) : date_create($start);
+    $end = is_timestamp($end) ? date_create(date('Ymd', $end)) : date_create($end);
     $interval = new \DateInterval('P' . $interval . 'D');
     $daterange = new \DatePeriod($start, $interval, $end);
     $res = [];
