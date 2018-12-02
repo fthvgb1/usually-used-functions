@@ -232,9 +232,13 @@ class MultipleCurl
                 } else {
                     $this->handle[$url] = function ($ch) use ($path) {
                         $content = curl_multi_getcontent($ch);
-                        $fp = fopen($path, 'wb');
-                        fwrite($fp, $content);
-                        fclose($fp);
+                        if (is_callable($path)) {
+                            call_user_func_array($path, [$content, $ch]);
+                        } else {
+                            $fp = fopen($path, 'wb');
+                            fwrite($fp, $content);
+                            fclose($fp);
+                        }
                     };
                 }
                 if (isset($path[1]) && is_array($path[1])) {
