@@ -74,21 +74,31 @@ class MultipleCurl
     public function get($urls = [], $options = [])
     {
         foreach ($urls as $i => $url) {
-            if (strpos($i, 'http') !== false) {
+            $option = [];
+            if (substr($i, 0, 4) == 'http') {
                 $this->chs[$i] = curl_init($i);
                 if (is_callable($url)) {
                     call_user_func_array($url, [&$this->chs[$i]]);
                 } elseif (is_array($url)) {
-                    curl_setopt_array($this->chs[$i], $url);
+
+                    foreach ($url as $k => $item) {
+                        if (in_array($k, [0, 'callback']) && is_callable($item)) {
+                            $this->handle[$i] = $item;
+                        }
+                        if (in_array($k, [1, 'options']) && is_array($item)) {
+                            $option = $item;
+                        }
+                    }
                 }
             } else {
                 $this->chs[$i] = curl_init($url);
-                curl_setopt_array($this->chs[$i], self::$options);
+                $option = self::$options;
             }
 
             if ($options) {
-                curl_setopt_array($this->chs[$url], $options);
+                $option += $options;
             }
+            curl_setopt_array($this->chs[$i], $option);
             curl_multi_add_handle($this->mh, $this->chs[$i]);
         }
         return $this->run();
@@ -113,7 +123,7 @@ class MultipleCurl
 
         foreach ($this->chs as $k => $v) {
             if (isset($this->handle[$k]) && is_callable($this->handle[$k])) {
-                call_user_func_array($this->handle[$k], [$v]);
+                $res[$k] = call_user_func_array($this->handle[$k], [$v]);
             } else {
                 $res[$k] = curl_multi_getcontent($v);
             }
@@ -142,7 +152,7 @@ class MultipleCurl
      * @param array $url_data data为URL-encoded 字符串时(http_build_query(array))，数据会被编码成 application/x-www-form-urlencoded,
      * data为array时会把数据编码成 multipart/form-data
      * [
-     *  ['url'=>'url','data'=>['postfield'=>'data'],'set_handle'=>callable($ch),'callback'=>callable($ch)],
+     *  ['url'=>'url','data'=>['postfield'=>'data'],'options'=>array(),'callback'=>callable($ch)],
      *  'url'=>['postfield'=>'data','file'=>new CURLFile(absolute_path,[mineType],[postName])],
      *
      * ]
@@ -153,7 +163,7 @@ class MultipleCurl
     {
         $i = 0;
         foreach ($url_data as $url => $data) {
-            if (strpos($url, 'http') !== false) {
+            if (substr($url, 0, 4) == 'http') {
                 $this->chs[$url] = curl_init($url);
                 if (is_callable($data)) {
                     call_user_func_array($data, [&$this->chs[$url]]);
@@ -174,18 +184,15 @@ class MultipleCurl
                     if (isset($data['callback']) && is_callable($data['callback'])) {
                         $this->handle[$u] = $data['callback'];
                     }
-                    if (isset($data['set_handle']) && is_callable($data['set_handle'])) {
-                        call_user_func_array($data['set_handle'], [&$this->chs[$u]]);
-                    } else {
-                        curl_setopt_array($this->chs[$u], [
-                            CURLOPT_POST => 1,
-                            CURLOPT_POSTFIELDS => $data['data'] ?? []
-                        ]);
-                    }
+                    $option = (isset($data['options']) && is_array($data['options'])) ? $data['options'] : [
+                        CURLOPT_POST => 1,
+                        CURLOPT_POSTFIELDS => $data['data'] ?? []
+                    ];
 
                     if ($options) {
-                        curl_setopt_array($this->chs[$u], $options);
+                        $option += $options;
                     }
+                    curl_setopt_array($this->chs[$u], $option);
                     curl_multi_add_handle($this->mh, $this->chs[$u]);
                     ++$i;
                 }
@@ -216,22 +223,46 @@ class MultipleCurl
     {
         foreach ($url_path as $url => $path) {
             $this->chs[$url] = curl_init($url);
-            curl_setopt_array($this->chs[$url], $options ?: self::$options);
-            if ($options) {
-                curl_setopt_array($this->chs[$url], $options);
-            }
-            curl_multi_add_handle($this->mh, $this->chs[$url]);
-            $this->handle[$url] = function ($ch) use ($path) {
-                $content = curl_multi_getcontent($ch);
-                if (is_callable($path)) {
-                    call_user_func_array($path, [$content, $ch]);
+            if (is_array($path)) {
+                if (isset($path[0]) && is_callable($path[0])) {
+                    $this->handle[$url] = function ($ch) use ($path) {
+                        $content = curl_multi_getcontent($ch);
+                        return call_user_func_array($path[0], [$content, $ch]);
+                    };
                 } else {
-                    $fp = fopen($path, 'wb');
-                    fwrite($fp, $content);
-                    fclose($fp);
+                    $this->handle[$url] = function ($ch) use ($path) {
+                        $content = curl_multi_getcontent($ch);
+                        $fp = fopen($path, 'wb');
+                        fwrite($fp, $content);
+                        fclose($fp);
+                    };
                 }
+                if (isset($path[1]) && is_array($path[1])) {
+                    $option = $path[1] + $options;
+                } else {
+                    $option = $options + self::$options;
+                }
+                curl_setopt_array($this->chs[$url], $option);
 
-            };
+
+            } else {
+                $option = $options + self::$options;
+                curl_setopt_array($this->chs[$url], $option);
+                curl_multi_add_handle($this->mh, $this->chs[$url]);
+                $this->handle[$url] = function ($ch) use ($path) {
+                    $content = curl_multi_getcontent($ch);
+                    if (is_callable($path)) {
+                        return call_user_func_array($path, [$content, $ch]);
+                    } else {
+                        $fp = fopen($path, 'wb');
+                        fwrite($fp, $content);
+                        fclose($fp);
+                        return null;
+                    }
+
+                };
+            }
+
 
         }
         $this->run();
